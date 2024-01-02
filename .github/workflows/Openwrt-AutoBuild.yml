@@ -9,7 +9,12 @@
 name: Build OpenWrt
 
 on: 
-  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      param:
+        description: 'parameter'
+        required: false
+        default: ''
 
 env:
   REPO_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
