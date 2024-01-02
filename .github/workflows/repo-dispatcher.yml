@@ -24,7 +24,7 @@ jobs:
   build:
     runs-on: Ubuntu-22.04
     
-    name: Build ${{matrix.target}}
+    name: Build ipq60xx_generic
     strategy:
       fail-fast: false
       matrix:
