@@ -31,18 +31,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ["${{ github.event.client_payload.target }}"]
+        target: ["ipq60xx_generic"]
         
     steps:
     - name: Checkout
       uses: actions/checkout@main
       with:
           fetch-depth: 0
-
-    # - name: Set up secret file
-      # run: |
-        # echo ${{ secrets.TELEGRAM_CHAT_ID }} | sed 's/./& /g'
-        # echo ${{ secrets.TELEGRAM_TOKEN }} | sed 's/./& /g'
 
     - name: Load Settings.ini
       run: |
@@ -63,41 +58,8 @@ jobs:
         echo "UPLOAD_FIRMWARE_TO_WETRANSFER=${UPLOAD_FIRMWARE_TO_WETRANSFER}" >> $GITHUB_ENV
         sed -i "1a REPO_TOKEN=${{ secrets.TOKEN_KIDDIN9 }}" ${GITHUB_WORKSPACE}/devices/common/diy.sh
         sed -i "1a TARGET=${{matrix.target}}" ${GITHUB_WORKSPACE}/devices/common/diy.sh
-        if [ ${{matrix.target}} == "x86_64" ]; then
-            echo "ARCH=linux/amd64" >> $GITHUB_ENV
-            echo "MTARGET=x86_64" >> $GITHUB_ENV
-        elif [ ${{matrix.target}} == "x86_generic" ]; then
-            echo "ARCH=linux/amd32" >> $GITHUB_ENV
-            echo "MTARGET=x86_generic" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} =~ (armvirt_64|ipq807x_generic|mediatek_mt7622|mediatek_mt7981|mediatek_filogic|bcm27xx_bcm2710|ipq60xx_generic|ipq60xx_ipq60xx_64|bcm4908_generic|sunxi_cortexa53) ]]; then
+        if [[ ${{matrix.target}} =~ (armvirt_64|ipq807x_generic|mediatek_mt7622|mediatek_mt7981|mediatek_filogic|bcm27xx_bcm2710|ipq60xx_generic|ipq60xx_ipq60xx_64|bcm4908_generic|sunxi_cortexa53) ]]; then
             echo "MTARGET=aarch64_cortex-a53" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} =~ (ramips_mt7621|ramips_mt7620|ramips_mt76x8) ]]; then
-            echo "MTARGET=mipsel_24kc" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "ath79_nand" ]]; then
-            echo "MTARGET=mips_24kc" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "ipq50xx_arm" ]]; then
-            echo "MTARGET=arm_cortex-a7" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} =~ (ipq40xx_generic|bcm27xx_bcm2709|sunxi_cortexa7) ]]; then
-            echo "MTARGET=arm_cortex-a7_neon-vfpv4" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "meson_meson8b" ]]; then
-            echo "MTARGET=arm_cortex-a5_vfpv4" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "bcm53xx" ]]; then
-            echo "MTARGET=arm_cortex-a9" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "mvebu_cortexa9" ]]; then
-            echo "MTARGET=arm_cortex-a9_vfpv3-d16" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "ipq806x_generic" ]]; then
-            echo "MTARGET=arm_cortex-a15_neon-vfpv4" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "bcm27xx_bcm2708" ]]; then
-            echo "MTARGET=arm_arm1176jzf-s_vfp" >> $GITHUB_ENV
-        elif [[ ${{matrix.target}} == "kirkwood_generic" ]]; then
-            echo "MTARGET=arm_xscale" >> $GITHUB_ENV
-        else
-          echo "ARCH=linux/arm64" >> $GITHUB_ENV
-          if [[ ${{matrix.target}} == "bcm27xx_bcm2711" ]]; then
-            echo "MTARGET=aarch64_cortex-a72" >> $GITHUB_ENV
-          elif [[ ${{matrix.target}} == "rockchip_armv8" || ${{matrix.target}} == "rockchip_rk3588_armv8" ]]; then
-            echo "MTARGET=aarch64_generic" >> $GITHUB_ENV
-          fi
         fi
 
     - name: Trigger Packages Update
@@ -235,10 +197,6 @@ jobs:
         fi
         df -hT
 
-    - name: SSH connection to Actions
-      uses: kiddin9/debugger-action@master
-      if: contains(github.event.action, 'ssh')
-
     - name: Compile the firmware
       id: compile
       run: |
@@ -281,112 +239,4 @@ jobs:
       with:
         name: ${{ env.VERSION }}_${{matrix.target}}
         path: |
-          openwrt/bin/targets/
-
-    - name: Deploy imagebuilder to server
-      uses: easingthemes/ssh-deploy@main
-      if: env.SSH_PRIVATE_KEY && ! contains(github.event.action, 'noser')
-      with:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        ARGS: "-avzr"
-        SOURCE: openwrt/bin/targets
-        REMOTE_HOST: ${{ secrets.SERVER_HOST }}
-        REMOTE_PORT: ${{ secrets.SERVER_PORT }}
-        REMOTE_USER: root
-        TARGET: "/www/wwwroot/op.supes.top/releases/tmp/"
-
-    - name: Upload firmware to cowtransfer
-      if: env.UPLOAD_FIRMWARE_TO_COWTRANSFER == 'true'
-      continue-on-error: true
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        cowurl=$(./transfer cow --block 2621440 -s --no-progress ${FIRMWARE})
-        cowurl=$(echo $cowurl | grep -o -E "https[^ ]*")
-        echo "COWURL=$cowurl" >> $GITHUB_ENV
-        echo "Download Link: ${{ env.EMOJI }} $cowurl ${{ env.EMOJI }} 🚀"
- 
-    - name: Upload firmware to WeTransfer
-      if: env.UPLOAD_FIRMWARE_TO_WETRANSFER == 'true' && ! contains(github.event.action, 'noup')
-      continue-on-error: true
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        wetrans=$(./transfer wet -s -p 16 --no-progress ${FIRMWARE})
-        wetrans=$(echo $wetrans | grep -o -E "https[^ ]*")
-        echo "WETRANS=$wetrans" >> $GITHUB_ENV
-        echo "Download Link: ${{ env.EMOJI }} $wetrans ${{ env.EMOJI }} 🚀"
-
-    - name: Create release
-      id: create_release
-      if: env.REPO_TOKEN && env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
-      continue-on-error: true
-      run: |
-        echo -e "墙内加速下载 🚀:\n" >> release.txt
-        echo -e "[腾讯云] (https://op.supes.top/firmware/${{matrix.target}}/ ☁)\n" >> release.txt
-        [ ${{ env.WETRANS }} ] && echo -e "[WeTransfer] (${{ env.WETRANS }} 🗽)\n" >> release.txt
-        [ ${{ env.COWURL }} ] && echo -e "[奶牛上传] (${{ env.COWURL }} 🐮)\n" >> release.txt
-        [ ${{ env.NOTICE }} ] && echo -e "${{ env.NOTICE }}" >> release.txt || true
-
-    - name: Upload firmware for release
-      uses: softprops/action-gh-release@master
-      continue-on-error: true
-      if: env.REPO_TOKEN && env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
-      with:
-        files: "${{ env.FIRMWARE }}/*"
-        name: ${{ env.date2 }} ${{matrix.target}} ${{ env.EMOJI }}
-        tag_name: ${{ env.date }}_${{matrix.target}}
-        body_path: release.txt
-      
-    - name: Set Up Docker Buildx
-      uses: docker/setup-buildx-action@master
-      if: env.DOCKER_ID && env.DOCKER_PASSWD
-
-    - name: Login To DockerHub
-      uses: docker/login-action@master
-      if: env.DOCKER_ID && env.DOCKER_PASSWD
-      with:
-        username: ${{ secrets.DOCKER_ID }}
-        password: ${{ secrets.DOCKER_PASSWD }}
-
-    - name: Build and push docker image
-      uses: docker/build-push-action@master
-      continue-on-error: true
-      if: env.DOCKER_ID && env.DOCKER_PASSWD && ! contains(github.event.action, 'noser') && github.event.client_payload.target == 'x86_64'
-      with:
-        platforms: ${{ env.ARCH }}
-        file: Dockerfile
-        context: .
-        push: true
-        tags: |
-          ${{ secrets.DOCKER_ID }}/openwrt-nginx:${{ matrix.target }}
-          ${{ env.DOCKERTAG }}
-    
-    - name: WeChat notification
-      continue-on-error: true
-      if: env.SCKEY
-      run: |
-        # [ steps.compile.outputs.status == 'success' ] && curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=🎉OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译完成😋|| curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=❌OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译失败😂
-
-    - name: Telegram notification
-      if: env.TELEGRAM_TOKEN && ! contains(github.event.action, 'notg')
-      continue-on-error: true
-      run: |
-        curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=🎉 OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译成功 😋  https://op.supes.top/firmware/${{matrix.target}}/  ${{ env.COWURL }}   ${{ env.WETRANS }} 🚀" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage"
-
-    - name: Delete workflow runs
-      uses: GitRML/delete-workflow-runs@main
-      continue-on-error: true
-      with:
-        retain_days: 100
-        keep_minimum_runs: 0
-
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
-      continue-on-error: true
-      if: env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true' && !cancelled()
-      with:
-        keep_latest: 15
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
+          openwrt/bin/
